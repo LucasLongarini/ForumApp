@@ -68,12 +68,12 @@ router.post('/login', (req, res)=>{
                 bcrypt.compare(passwordPlain, hashedPass, (err, good)=>{
                     if(good){
                         const token = jwt.sign({
-                            id: result[0].id,
+                            id: result[0].user_id,
                             email: result[0].email
                         },process.env.JWT_SECRET)
                         res.status(200).json({response: "successful",
                                               token: token,
-                                              user_id: result[0].id})
+                                              user_id: result[0].user_id})
                         return
                     }else{
                         //never tell why auth failed. (could give hackers clues)

@@ -34,10 +34,12 @@ router.get('/recent',checkAuth, (req, res)=>{
     }
     const pageSize = 10
     var startRecord = pageSize*(page-1)
-    var sql = "SELECT posts.*, users.name, users.user_id, users.picture_url FROM posts, users "+
-    "WHERE posts.date_posted <='"+timeStamp.getDateNow()+"' "+ "AND users.user_id = posts.user_id "+
-    //"AND post_like_record.user_id="+req.authData.id+" OR post_like_record.post_id=posts.id "+
-    "ORDER BY posts.date_posted DESC LIMIT "+startRecord+", "+pageSize 
+
+    var sql = "SELECT posts.*, users.name, users.user_id, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
+          "INNER JOIN users ON users.user_id = posts.user_id "+
+          "LEFT JOIN post_like_record ON post_like_record.user_id = posts.user_id AND post_like_record.post_id = posts.id "+
+          "WHERE posts.date_posted <='"+timeStamp.getDateNow()+"' "+
+          "ORDER BY posts.date_posted DESC LIMIT "+startRecord+", "+pageSize 
     con.query(sql, (err, response)=>{
         if(err){
             console.log(err)
@@ -73,10 +75,16 @@ router.get('/trending',checkAuth, (req, res)=>{
     var startDay = timeStamp.getBeggingOfDay()
     var nextDay = timeStamp.getNextDay()
 
-    var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url FROM posts, users"+
-    " WHERE posts.date_posted >= "+"'"+startDay+"'"+" "+"AND posts.date_posted < "+"'"+nextDay+"'" + "AND posts.votes >= 0"+
-    " AND users.user_id = posts.user_id"+                                                 
-    " ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
+    // var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url FROM posts, users"+
+    // " WHERE posts.date_posted >= "+"'"+startDay+"'"+" "+"AND posts.date_posted < "+"'"+nextDay+"'" + "AND posts.votes >= 0"+
+    // " AND users.user_id = posts.user_id"+                                                 
+    // " ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
+
+    var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url, post_like_record.like_value FROM posts "+
+          "INNER JOIN users ON users.user_id = posts.user_id "+
+          "LEFT JOIN post_like_record ON post_like_record.user_id = posts.user_id AND post_like_record.post_id = posts.id "+
+          "WHERE posts.date_posted >= "+"'"+startDay+"'"+" "+"AND posts.date_posted < "+"'"+nextDay+"'" + "AND posts.votes >= 0 "+
+          "ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
 
     con.query(sql, (err, response)=>{
         if(err){
@@ -153,7 +161,7 @@ router.delete('/:PostId',checkAuth, (req, res)=>{
     })
 })
 
-router.get('/votes/:PostId',checkAuth, (req, res)=>{
+router.get('/:PostId/votes',checkAuth, (req, res)=>{
     const id = req.params.PostId
     var sql = "SELECT votes FROM posts WHERE id="+id
     con.query(sql, (err, response)=>{
@@ -166,7 +174,7 @@ router.get('/votes/:PostId',checkAuth, (req, res)=>{
     })
 })
 
-router.patch('/votes/:PostId',checkAuth, (req, res) => {
+router.patch('/:PostId/votes',checkAuth, (req, res) => {
     var value = req.query.value
     var type;
     if(value == '1' ||value == '+1'){
