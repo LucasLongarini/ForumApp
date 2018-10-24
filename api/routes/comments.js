@@ -28,10 +28,16 @@ router.post('/:PostId',checkAuth, (req, res)=>{
 
 router.get('/:PostId', checkAuth, (req, res)=>{
     var id = req.params.PostId
-    var sql = "SELECT comments.*, users.user_id, users.name, users.picture_url FROM comments, users "+ 
-    "WHERE comments.post_id = "+id+" AND users.user_id = comments.user_id ORDER BY comments.date_posted DESC"
+    // var sql = "SELECT comments.*, users.user_id, users.name, users.picture_url FROM comments, users "+ 
+    // "WHERE comments.post_id = "+id+" AND users.user_id = comments.user_id ORDER BY comments.date_posted DESC"
+
+    var sql = "SELECT comments.*, users.user_id, users.name, users.picture_url, COALESCE(comments_like_record.like_value, 0) AS like_value FROM comments "+
+          "INNER JOIN users ON users.user_id = comments.user_id "+
+          "LEFT JOIN comments_like_record ON comments_like_record.user_id = comments.user_id AND comments_like_record.comment_id = comments.id "+
+          "WHERE comments.post_id = "+id+" ORDER BY comments.date_posted DESC"
     con.query(sql, (err, result)=>{
         if(err){
+            console.log(err)
             res.status(500).json({response: "server error"})
             return
         }else{
@@ -47,14 +53,14 @@ router.get('/:PostId', checkAuth, (req, res)=>{
     })
 })
 
-router.patch('/votes/:PostId/:CommentId',checkAuth, (req, res) => {
+router.patch('/:PostId/:CommentId/votes',checkAuth, (req, res) => {
     var value = req.query.value
     var type;
-    if(value == '1'){
-        type = "+ 1"
+    if(value == '1'||value=='+1'){
+        type = "+1"
     }
     else if(value == '-1'){
-        type = "- 1"
+        type = "-1"
     }
     else{
         res.status(400).json({response:'bad request'})
@@ -62,18 +68,23 @@ router.patch('/votes/:PostId/:CommentId',checkAuth, (req, res) => {
     }
     var sql = "UPDATE comments SET votes = votes " + type + " WHERE id="+req.params.CommentId+
     " AND post_id="+req.params.PostId
-    con.query(sql, (err, result)=>{
-        if(err){
-            res.status(500).json({response:"server error"})
-            return
-        }
+    con.query(sql, (err)=>{
+        if(err) return res.status(500).json({response:"server error"})
         else{
-            res.json({response:"successful"})
+            var like_value = 0
+            if(type == '+1') like_value = 1
+            else if(type == '-1')like_value = -1
+            sql = "INSERT INTO comment_like_record (user_id, comment_id, like_value) "+
+                  "VALUES ('"+req.authData.id+"','"+req.params.CommentId+"','"+like_value+"')"
+            con.query(sql, (err)=>{
+                if(err) return res.status(500).json({response:"server error"})
+                else return res.json({response:"successful"})
+            })
         }
     })
 })
 
-router.get('/votes/:PostId/:CommentId', checkAuth, (req, res)=>{
+router.get('/:PostId/:CommentId/votes', checkAuth, (req, res)=>{
     if(!req.params.CommentId || !req.params.PostId)return res.status(400).json({response:"bad request"})
     var sql = "SELECT votes FROM comments WHERE id="+req.params.CommentId + 
     " AND post_id="+req.params.PostId
@@ -88,6 +99,7 @@ router.get('/votes/:PostId/:CommentId', checkAuth, (req, res)=>{
     })
 })
 
+//fix
 router.get('/:CommentId', checkAuth, (req,res)=>{
     if(!req.params.CommentId)return res.status(400).json({response:"bad request"})
     var sql = "SELECT * FROM comments WHERE id="+req.params.CommentId 

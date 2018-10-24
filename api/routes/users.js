@@ -4,7 +4,14 @@ const con = require('../db')
 const bcrypt = require('bcryptjs')
 const jwt  = require('jsonwebtoken')
 const checkAuth = require('../auth')
+const fs = require('fs')
+const cloudinary = require('cloudinary')
 
+cloudinary.config({ 
+    cloud_name: 'dsgtzloau', 
+    api_key: '191975171813797', 
+    api_secret: 'Dd8aUnrnDUU4Pd4uup89-nReDlk'
+});
 
 //shoudl reply with a jwt that does not expire
 router.post('/register', (req, res)=>{
@@ -209,8 +216,29 @@ router.patch('/:userId', checkAuth, (req, res)=>{
     })
 })
 
-router.get('/picture', (req, res)=>{
-    res.send('not implemented')
+router.post('/picture', checkAuth, (req,res)=>{
+    var data = new Buffer('');
+    req.on('data', function(chunk) {
+        data = Buffer.concat([data, chunk]);
+    });
+    req.on('end', function() {
+        var id = "user-"+req.authData.id
+        cloudinary.v2.uploader.upload_stream({resource_type: 'image', public_id:id}, 
+        function(error, result){
+            if(error)return res.status(500).json({response:"server error"})
+            else{
+                var sql = "UPDATE users SET picture_url ='"+result.public_id+"'"
+                con.query(sql, (err)=>{
+                    if(err)return res.status(500).json({response:"server error"})
+                    else return res.status(201).json({response:"successful"})
+                })
+            }
+        })
+        .end(data);
+    });
+    
 })
+
+
 
 module.exports = router
