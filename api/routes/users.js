@@ -93,10 +93,16 @@ router.post('/login', (req, res)=>{
     }
 })
 
+router.post('/login/facebook', (req, res)=>{
+    var facebooktoken = req.headers.facebooktoken || req.body.facebooktoken
+    if(!facebooktoken) return res.status(400).json({response:"bad request"})
+
+})
+
 router.get('/:userId', checkAuth, (req, res)=>{
     if(!req.params.userId)return res.status(400).json({response: "bad request"})
     
-    var sql = "SELECT id, name, email, picture_url FROM users WHERE user_id="+req.params.userId
+    var sql = "SELECT user_id, name, email, picture_url FROM users WHERE user_id="+req.params.userId
     con.query(sql, (err, result)=>{
         if(err){
             return res.status(500).json({response: "server error"})
@@ -195,7 +201,13 @@ router.delete('/:userId', checkAuth, (req, res)=>{
                     sql = "DELETE FROM posts WHERE user_id="+id
                     con.query(sql, (err)=>{
                         if(err)return res.status(500).json({response: "server error"})
-                        else return res.status(201).json({response: "success"})
+                        else {
+                            var picId = 'user-'+id
+                            cloudinary.v2.uploader.destroy(picId, (error, result)=>{
+                                if(error) return res.status(207).json({response: "deleted from database not picture"})
+                                else return res.status(201).json({response: "success"})
+                            });
+                        }
                     })
                 }
             })
@@ -206,7 +218,7 @@ router.delete('/:userId', checkAuth, (req, res)=>{
 })
 
 //to change name
-router.patch('/:userId', checkAuth, (req, res)=>{
+router.patch('/:userId/name', checkAuth, (req, res)=>{
     if(!req.params.userId || !req.body.name)return res.status(400).json({response: "bad request"})
     if(req.params.userId != req.authData.id)return res.status(403).json({response: "forbidden"})
     var sql = "UPDATE users SET name ='"+req.body.name+"' WHERE user_id="+req.params.userId
@@ -227,7 +239,8 @@ router.post('/picture', checkAuth, (req,res)=>{
         function(error, result){
             if(error)return res.status(500).json({response:"server error"})
             else{
-                var sql = "UPDATE users SET picture_url ='"+result.public_id+"'"
+                var sql = "UPDATE users SET picture_url ='"+result.public_id+"'" +
+                          " WHERE user_id = "+req.authData.id
                 con.query(sql, (err)=>{
                     if(err)return res.status(500).json({response:"server error"})
                     else return res.status(201).json({response:"successful"})
@@ -238,7 +251,5 @@ router.post('/picture', checkAuth, (req,res)=>{
     });
     
 })
-
-
 
 module.exports = router
