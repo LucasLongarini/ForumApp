@@ -95,6 +95,7 @@ router.get('/trending',checkAuth, (req, res)=>{
 })
 
 router.get('/:PostId',checkAuth, (req, res)=>{
+    if(!req.params.PostId)return res.status(400).json({response:"bad request"})
     const id = req.params.PostId
     var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
     "INNER JOIN users ON users.user_id = posts.user_id "+
@@ -182,8 +183,8 @@ router.get('/:PostId/votes',checkAuth, (req, res)=>{
 })
 
 router.patch('/:PostId/votes',checkAuth, (req, res) => {
-    if(!req.query.value || !req.params.PostId)return res.status(400).json({resposne:"bad request"})
     var value = req.query.value
+    if(!req.query.value || !req.params.PostId||(value!='-1'&&value!='1'&&value!='+1'))return res.status(400).json({resposne:"bad request"})
     var type;
     
     if(value == '1' ||value == '+1')type = "+1"
@@ -197,7 +198,6 @@ router.patch('/:PostId/votes',checkAuth, (req, res) => {
             sql = "INSERT INTO post_like_record (user_id, post_id, like_value) VALUES ('"+req.authData.id+"','"+req.params.PostId+"','"+type+"') "+
                   "ON DUPLICATE KEY UPDATE like_value=like_value "+type
             con.query(sql, (err)=>{
-                console.log(err)
                 if(err)return res.status(500).json({response:'server error'})
                 else return res.json({response:"successful"})
             })
