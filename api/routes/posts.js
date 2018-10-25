@@ -6,18 +6,13 @@ const con = require('../db')
 
 
 router.post('/',checkAuth, (req, res) =>{
-    if(!req.body.content || !req.body.user_id) return res.status(400).json({response:"bad request"})
-    if(req.authData.id != req.body.user_id) return res.status(403).json({response:"forbidden"}) 
+    if(!req.body.content) return res.status(400).json({response:"bad request"})
     var date = timeStamp.getDateNow()
     var sql = "INSERT INTO posts (content, user_id, date_posted) VALUES ('"
-    +req.body.content+"', '"+req.body.user_id+ "', '"+date+"')"
-    con.query(sql, (err, result)=>{
-        if (err) {
-            res.status(500).json({response:"server error"})
-            return
-        }else{
-            res.status(201).json({response:"successful"})
-        }
+    +req.body.content+"', '"+req.authData.id+ "', '"+date+"')"
+    con.query(sql, (err)=>{
+        if(err) return res.status(500).json({response:"server error"})
+        else return res.status(201).json({response:"successful"})
     })
 })
 
@@ -37,7 +32,7 @@ router.get('/recent',checkAuth, (req, res)=>{
 
     var sql = "SELECT posts.*, users.name, users.user_id, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
           "INNER JOIN users ON users.user_id = posts.user_id "+
-          "LEFT JOIN post_like_record ON post_like_record.user_id = posts.user_id AND post_like_record.post_id = posts.id "+
+          "LEFT JOIN post_like_record ON post_like_record.user_id = "+req.authData.id+" AND post_like_record.post_id = posts.id "+
           "WHERE posts.date_posted <='"+timeStamp.getDateNow()+"' "+
           "ORDER BY posts.date_posted DESC LIMIT "+startRecord+", "+pageSize 
     con.query(sql, (err, response)=>{
@@ -75,14 +70,9 @@ router.get('/trending',checkAuth, (req, res)=>{
     var startDay = timeStamp.getBeggingOfDay()
     var nextDay = timeStamp.getNextDay()
 
-    // var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url FROM posts, users"+
-    // " WHERE posts.date_posted >= "+"'"+startDay+"'"+" "+"AND posts.date_posted < "+"'"+nextDay+"'" + "AND posts.votes >= 0"+
-    // " AND users.user_id = posts.user_id"+                                                 
-    // " ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
-
-    var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url, post_like_record.like_value FROM posts "+
+    var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
           "INNER JOIN users ON users.user_id = posts.user_id "+
-          "LEFT JOIN post_like_record ON post_like_record.user_id = posts.user_id AND post_like_record.post_id = posts.id "+
+          "LEFT JOIN post_like_record ON post_like_record.user_id = "+req.authData.id+" AND post_like_record.post_id = posts.id "+
           "WHERE posts.date_posted >= "+"'"+startDay+"'"+" "+"AND posts.date_posted < "+"'"+nextDay+"'" + "AND posts.votes >= 0 "+
           "ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
 
@@ -106,8 +96,10 @@ router.get('/trending',checkAuth, (req, res)=>{
 
 router.get('/:PostId',checkAuth, (req, res)=>{
     const id = req.params.PostId
-    var sql = "SELECT posts.*, users.name, users.user_id, users.picture_url FROM posts, users WHERE posts.id="+id +
-    " AND users.user_id = posts.user_id"
+    var sql = "SELECT posts.*, users.user_id, users.name, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
+    "INNER JOIN users ON users.user_id = posts.user_id "+
+    "LEFT JOIN post_like_record ON post_like_record.user_id = "+req.authData.id+" AND post_like_record.post_id = posts.id "+
+    "WHERE posts.id="+id
     con.query(sql, (err, result)=>{
         if(err){
             res.status(500).json({response: "server error"})
@@ -120,6 +112,30 @@ router.get('/:PostId',checkAuth, (req, res)=>{
             result[0].time_elapsed = timeStamp.getSecondsPast(result[0].date_posted)
             delete result[0].date_posted
             res.status(200).json(result[0])
+        }
+    })
+})
+
+router.get('/:UserId/posts', checkAuth, (req,res)=>{ 
+    if(!req.params.UserId || !req.query.page || !Number.isInteger(Number(req.query.page)) || req.query.page == '0') return res.status(400).json({response:"bad request"})
+    var page = req.query.page
+    const pageSize = 3
+    var startRecord = pageSize*(page-1)
+    var sql = "SELECT posts.*, users.name, users.user_id, users.picture_url, COALESCE(post_like_record.like_value, 0) AS like_value FROM posts "+
+              "INNER JOIN users ON users.user_id = posts.user_id "+
+              "LEFT JOIN post_like_record ON post_like_record.user_id = "+req.authData.id+" AND post_like_record.post_id = posts.id "+
+              "WHERE posts.user_id="+req.params.UserId+" ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize
+    con.query(sql, (err,result)=>{
+        if(err)return res.status(500).json({response:"server error"})
+        else{
+            for(i=0; i<result.length; i++){
+                var user = {id: result[i].user_id, name: result[i].name, picture_url: result[i].picture_url}
+                result[i].user = user
+                delete result[i].user_id; delete result[i].name; delete result[i].picture_url
+                result[i].time_elapsed = timeStamp.getSecondsPast(result[i].date_posted)
+                delete result[i].date_posted
+            }
+            res.status(200).json(result)
         }
     })
 })
@@ -144,61 +160,44 @@ router.delete('/:PostId',checkAuth, (req, res)=>{
     if(!req.body.user_id)return res.status(400).json({response: "bad request"})
     if(req.authData.id != req.body.user_id) return res.status(403).json({response: "forbidden"})
     var id = req.params.PostId
-    var sql = "DELETE FROM posts WHERE id="+id + " AND user_id="+req.authData.id
-    con.query(sql, (err, response)=>{
-        if(err){
-            res.status(500).json({response:"server error"})
-            return
-        }else{
-            var sql2 = "DELETE FROM comments WHERE post_id="+id
-            con.query(sql2, (err, response)=>{
-                if(err)
-                    return status(500).json({response:"server error"})
-                else
-                    return res.status(200).json({response:"Success"})
-            })
-        }
+    var sql = "DELETE posts, comments,post_like_record FROM posts INNER JOIN comments ON comments.post_id = posts.id "+
+              "INNER JOIN post_like_record ON post_like_record.post_id=posts.id "+
+              "WHERE posts.id="+id+" AND posts.user_id="+req.authData.id
+    con.query(sql, (err)=>{
+        console.log(err)
+        if(err)return res.status(500).json({response:"server error"})
+        else return res.status(200).json({response:"Success"})
     })
+
 })
 
 router.get('/:PostId/votes',checkAuth, (req, res)=>{
+    if(!req.params.post)return res.status(400).json({response:"bad request"})
     const id = req.params.PostId
     var sql = "SELECT votes FROM posts WHERE id="+id
     con.query(sql, (err, response)=>{
-        if(err){
-            res.status(500).json({response:"server error"})
-            return
-        }else{
-            res.status(200).json(response[0])
-        }
+        if(err)return res.status(500).json({response:"server error"})  
+        else res.status(200).json(response[0])
     })
 })
 
 router.patch('/:PostId/votes',checkAuth, (req, res) => {
+    if(!req.query.value || !req.params.PostId)return res.status(400).json({resposne:"bad request"})
     var value = req.query.value
     var type;
-    if(value == '1' ||value == '+1'){
-        type = "+1"
-    }
-    else if(value == '-1'){
-        type = "-1"
-    }
-    else{
-        res.status(404).send('bad request')
-        return
-    }
+    
+    if(value == '1' ||value == '+1')type = "+1"
+    else if(value == '-1')type = "-1"
+    else return res.status(404).send('bad request')
+    
     var sql = "UPDATE posts SET votes = votes " + type + " WHERE id="+req.params.PostId
     con.query(sql, (err)=>{
-        if(err){
-            res.status(500).json({response:'server error'})
-            return
-        }
+        if(err)return res.status(500).json({response:'server error'})
         else{
-            var like;
-            if(type == '+1'){like = 1}
-            else {like = -1}
-            sql = "INSERT INTO post_like_record (user_id, post_id, like_value) VALUES ('"+req.authData.id+"','"+req.params.PostId+"','"+like+"')"
+            sql = "INSERT INTO post_like_record (user_id, post_id, like_value) VALUES ('"+req.authData.id+"','"+req.params.PostId+"','"+type+"') "+
+                  "ON DUPLICATE KEY UPDATE like_value=like_value "+type
             con.query(sql, (err)=>{
+                console.log(err)
                 if(err)return res.status(500).json({response:'server error'})
                 else return res.json({response:"successful"})
             })
