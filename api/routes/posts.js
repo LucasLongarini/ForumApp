@@ -10,9 +10,9 @@ router.post('/',checkAuth, (req, res) =>{
     var date = timeStamp.getDateNow()
     var sql = "INSERT INTO posts (content, user_id, date_posted) VALUES ('"
     +req.body.content+"', '"+req.authData.id+ "', '"+date+"')"
-    con.query(sql, (err)=>{
+    con.query(sql, (err,result)=>{
         if(err) return res.status(500).json({response:"server error"})
-        else return res.status(201).json({response:"successful"})
+        else return res.status(201).json({response:"successful",id:result.insertId})
     })
 })
 
@@ -36,11 +36,9 @@ router.get('/recent',checkAuth, (req, res)=>{
           "WHERE posts.date_posted <='"+timeStamp.getDateNow()+"' "+
           "ORDER BY posts.date_posted DESC LIMIT "+startRecord+", "+pageSize 
     con.query(sql, (err, response)=>{
-        if(err){
-            console.log(err)
-            res.status(500).json({response:"server error"})
-            return
-        }else{
+        if(err)return res.status(500).json({response:"server error"})
+        else if(response.length < 1)return res.status(404).json({response:"not found"})
+        else{
             for(i=0; i<response.length; i++){
                 var user = {id: response[i].user_id, name: response[i].name, picture_url: response[i].picture_url}
                 response[i].user = user
@@ -77,10 +75,8 @@ router.get('/trending',checkAuth, (req, res)=>{
           "ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize 
 
     con.query(sql, (err, response)=>{
-        if(err){
-            res.status(500).json({response: "server error"})
-            return
-        }
+        if(err)return res.status(500).json({response: "server error"})
+        else if(response.length < 1)return res.status(404).json({response: "not found"})
         else{
             for(i=0; i<response.length; i++){
                 var user = {id: response[i].user_id, name: response[i].name, picture_url: response[i].picture_url}
@@ -102,10 +98,8 @@ router.get('/:PostId',checkAuth, (req, res)=>{
     "LEFT JOIN post_like_record ON post_like_record.user_id = "+req.authData.id+" AND post_like_record.post_id = posts.id "+
     "WHERE posts.id="+id
     con.query(sql, (err, result)=>{
-        if(err){
-            res.status(500).json({response: "server error"})
-            return
-        }
+        if(err)return res.status(500).json({response: "server error"})
+        else if(result.length < 1)return res.status(404).json({response: "not found"})
         else{
             var user = {id: result[0].user_id, name: result[0].name, picture_url: result[0].picture_url}
             result[0].user = user
@@ -128,6 +122,7 @@ router.get('/:UserId/posts', checkAuth, (req,res)=>{
               "WHERE posts.user_id="+req.params.UserId+" ORDER BY posts.votes DESC LIMIT "+startRecord+", "+pageSize
     con.query(sql, (err,result)=>{
         if(err)return res.status(500).json({response:"server error"})
+        else if(result.length < 1)return res.status(404).json({response:"not found"})
         else{
             for(i=0; i<result.length; i++){
                 var user = {id: result[i].user_id, name: result[i].name, picture_url: result[i].picture_url}
@@ -142,32 +137,32 @@ router.get('/:UserId/posts', checkAuth, (req,res)=>{
 })
 
 router.patch('/:PostId',checkAuth, (req, res)=>{
-    if(!req.body.content|| !req.body.user_id) return res.status(400).json({response: "bad request"})
-    if(req.authData.id != req.body.user_id) return res.status(403).json({response: "forbidden"})
+    if(!req.body.content) return res.status(400).json({response: "bad request"})
     const postID = req.params.PostId
     var sql = "UPDATE posts SET content ='" + req.body.content + "' WHERE id = "+postID+
     " AND user_id ="+req.authData.id
     con.query(sql, (err, response)=>{
-        if(err){
-            res.status(500).json({response: "server error"})
-            return
-        }else{
-            res.status(201).json({response: "success"})
-        }
+        if(err)return res.status(500).json({response: "server error"})
+        else if(response.affectedRows < 1)return res.status(404).json({response: "not found"})
+        else return res.status(201).json({response: "success"})
     })
 })
 
 router.delete('/:PostId',checkAuth, (req, res)=>{
-    if(!req.body.user_id)return res.status(400).json({response: "bad request"})
-    if(req.authData.id != req.body.user_id) return res.status(403).json({response: "forbidden"})
+    if(!req.params.PostId)return res.status(400).json({response: "bad request"})
     var id = req.params.PostId
-    var sql = "DELETE posts, comments,post_like_record FROM posts INNER JOIN comments ON comments.post_id = posts.id "+
-              "INNER JOIN post_like_record ON post_like_record.post_id=posts.id "+
+    var sql = "DELETE FROM posts "+
               "WHERE posts.id="+id+" AND posts.user_id="+req.authData.id
-    con.query(sql, (err)=>{
-        console.log(err)
+    con.query(sql, (err, result)=>{
         if(err)return res.status(500).json({response:"server error"})
-        else return res.status(200).json({response:"Success"})
+        else if(result.affectedRows < 1)return res.status(404).json({response:"not found"})
+        else {
+            sql = "DELETE FROM post_like_record WHERE post_id = "+id
+            con.query(sql, (err)=>{
+                if(err)return res.status(500).json({response:"server error"})
+                else return res.status(200).json({response:"success"})
+            })
+        }
     })
 
 })

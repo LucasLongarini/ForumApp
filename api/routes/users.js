@@ -104,15 +104,9 @@ router.get('/:userId', checkAuth, (req, res)=>{
     
     var sql = "SELECT user_id, name, email, picture_url FROM users WHERE user_id="+req.params.userId
     con.query(sql, (err, result)=>{
-        if(err){
-            return res.status(500).json({response: "server error"})
-        }
-        else{
-            if(result.length > 0)
-                res.status(200).json(result[0])
-            else
-                res.status(404).json({response: "not found"})
-        }
+        if(err)return res.status(500).json({response: "server error"})
+        else if(result.length < 1)return res.status(404).json({response: "not found"})
+        else return res.status(200).json(result[0]) 
     })
 })
 
@@ -124,18 +118,20 @@ router.patch('/:userId/email', checkAuth, (req, res)=>{
     var sql = "SELECT password FROM users WHERE user_id="+req.params.userId
     con.query(sql, (err, result)=>{
         if(err)return res.status(500).json({response:"server error"})
+        else if(result.length < 1)return res.status(404).json({response:"not found"})
         else{
             bcrypt.compare(plainPass, result[0].password,(err, good)=>{
                 if(err)return res.status(500).json({response:"server error"})
                 if(good){
                     sql = "UPDATE users SET email="+"'"+req.body.new_email+"'"+"WHERE user_id="+req.params.userId
-                    con.query(sql,(err)=>{
+                    con.query(sql,(err,result)=>{
                         if(err){
                             if(err.errno == 1062) return res.status(409).json({response: "Email Already In Use"})
                             
                             res.status(500).json({response: "server error"})
                             return
                         }
+                        else if(result.affectedRows < 0)return res.status(404).json({response:"not found"})
                         else{
                             const token = jwt.sign({
                                 id: req.params.userId,
@@ -162,6 +158,7 @@ router.patch('/:userId/password', checkAuth, (req, res)=>{
     var sql = "SELECT password FROM users WHERE user_id="+id
     con.query(sql,(err, result)=>{
         if(err)return res.status(500).json({response:"server error"})
+        else if(result.length < 0)return res.status(404).json({response:"not found"})
         else{
             bcrypt.compare(plainPass, result[0].password, (err, good)=>{
                 if(err)return res.status(500).json({response:"server error"})
@@ -172,9 +169,9 @@ router.patch('/:userId/password', checkAuth, (req, res)=>{
                             sql = "UPDATE users SET password="+"'"+hash+"'"+" WHERE user_id ="+id
                             con.query(sql, (err, result)=>{
                                 if(err)return res.status(500).json({response:"server error"})
-                                else{
-                                    return res.status(201).json({response:"success"})
-                                }
+                                else if(result.affectedRows < 1)res.status(500).json({response:"server error"})
+                                else return res.status(201).json({response:"success"})
+                                
                             })
                         }
                     })
@@ -185,35 +182,28 @@ router.patch('/:userId/password', checkAuth, (req, res)=>{
     })
 })
 
-//should add deletion of photo alsos
 router.delete('/:userId', checkAuth, (req, res)=>{
     if(!req.params.userId) return res.status(400).json({response: "bad request"})
     const id = req.params.userId
     if(req.authData.id != id)return res.status(403).json({response: "forbidden"})
-    var sql = "DELETE FROM users WHERE user_id="+id
-    con.query(sql, (err)=>{
-        if(err)return res.status(500).json({response: "server error"})
+
+    var sql = "DELETE FROM users WHERE user_id="+req.authData.id
+    con.query(sql, (err,result)=>{
+        if(err)return res.status(500).json({response:"server error"})
+        else if(result.affectedRows < 1)return res.status(404).json({response:"not found"})
         else{
-            sql = "DELETE FROM comments WHERE user_id="+id
+            sql = "DELETE FROM post_like_record WHERE user_id="+req.authData.id
             con.query(sql, (err)=>{
-                if(err)return res.status(500).json({response: "server error"})
+                if(err)return res.status(500).json({response:"server error"})
                 else{
-                    sql = "DELETE FROM posts WHERE user_id="+id
+                    sql = "DELETE FROM comments_like_record WHERE user_id="+req.authData.id
                     con.query(sql, (err)=>{
-                        if(err)return res.status(500).json({response: "server error"})
-                        else {
-                            var picId = 'user-'+id
-                            cloudinary.v2.uploader.destroy(picId, (error, result)=>{
-                                if(error) return res.status(207).json({response: "deleted from database not picture"})
-                                else return res.status(201).json({response: "success"})
-                            });
-                        }
+                        if(err)return res.status(500).json({response:"server error"})
+                        else return res.status(200).json({response:"success"})
                     })
                 }
             })
-
         }
-            
     })
 })
 
@@ -222,8 +212,9 @@ router.patch('/:userId/name', checkAuth, (req, res)=>{
     if(!req.params.userId || !req.body.name)return res.status(400).json({response: "bad request"})
     if(req.params.userId != req.authData.id)return res.status(403).json({response: "forbidden"})
     var sql = "UPDATE users SET name ='"+req.body.name+"' WHERE user_id="+req.params.userId
-    con.query(sql, (err)=>{
+    con.query(sql, (err,result)=>{
         if(err)return res.status(500).json({response:"server error"})
+        else if(result.affectedRows < 1)res.status(404).json({response:"not found"})
         else return res.status(201).json({response:"success"})
     })
 })

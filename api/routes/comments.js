@@ -9,13 +9,14 @@ router.post('/:PostId',checkAuth, (req, res)=>{
     var date = time_stamp.getDateNow()
     const sql = "INSERT INTO comments (content, post_id, user_id, date_posted) "+
     "VALUES ('"+req.body.content+"', '"+req.params.PostId+"', '"+req.authData.id+"', '"+date+"')"
-    con.query(sql, (err)=>{
+    con.query(sql, (err,result)=>{
         if(err) return res.status(500).json({response: "server error"})
         else{
+            var newId = result.insertId
             var sql2 = "UPDATE posts SET comments = comments + 1 WHERE id="+req.params.PostId
             con.query(sql2, (err)=>{
                 if(err) return res.status(500).json({response: "server error"})
-                else return res.status(201).json({response: "Success"})
+                else return res.status(201).json({response: "Success",id:newId})
             })
         }
     })
@@ -25,7 +26,7 @@ router.get('/:PostId', checkAuth, (req, res)=>{
     if(!req.params.PostId)return res.status(400).json({response: "bad request"})
     var id = req.params.PostId
     var sql = "SELECT comments.*, users.user_id, users.name, users.picture_url, COALESCE(comments_like_record.like_value, 0) AS like_value FROM comments "+
-          "INNER JOIN users ON users.user_id = comments.user_id "+
+          "LEFT JOIN users ON users.user_id = comments.user_id "+
           "LEFT JOIN comments_like_record ON comments_like_record.user_id = "+req.authData.id+" AND comments_like_record.comment_id = comments.id "+
           "WHERE comments.post_id = "+id+" ORDER BY comments.date_posted DESC"
     con.query(sql, (err, result)=>{
@@ -80,7 +81,7 @@ router.get('/:CommentId/votes', checkAuth, (req, res)=>{
 router.get('/:CommentId/single', checkAuth, (req,res)=>{
     if(!req.params.CommentId)return res.status(400).json({response:"bad request"})
     var sql = "SELECT comments.*, users.user_id, users.name, users.picture_url, COALESCE(comments_like_record.like_value, 0) AS like_value FROM comments "+
-              "INNER JOIN users ON users.user_id = comments.user_id "+
+              "LEFT JOIN users ON users.user_id = comments.user_id "+
               "LEFT JOIN comments_like_record ON comments_like_record.user_id = "+req.authData.id+" AND comments_like_record.comment_id = comments.id "+
               "WHERE comments.id = "+req.params.CommentId
     con.query(sql, (err,result)=>{
@@ -99,19 +100,23 @@ router.get('/:CommentId/single', checkAuth, (req,res)=>{
 router.delete('/:PostId/:CommentId', checkAuth, (req,res)=>{
     if(!req.params.CommentId || !req.params.PostId)return res.status(400).json({response:"bad request"})
     var sql = "DELETE FROM comments WHERE id="+req.params.CommentId+" AND user_id="+req.authData.id
-    console.log(sql)
     con.query(sql, (err, result)=>{
         if(err)return res.status(500).json({response:"server error"})
         else if(result.affectedRows < 1) return res.status(404).json({response:"not found"})
         else{
-            console.log(result)
-            var sql2 = "UPDATE posts SET comments = comments - 1 WHERE id="+req.params.PostId
-            con.query(sql2, (error)=>{
-                if(error) return res.status(500).json({response:"server error"}) 
+            sql = "UPDATE posts SET comments = comments - 1 WHERE id="+req.params.PostId
+            con.query(sql, (err)=>{
+                if(err)return res.status(500).json({response:"server error"})
+                else{
+                    sql = "DELETE FROM comments_like_record WHERE comment_id="+req.params.CommentId
+                    con.query(sql, (err)=>{
+                        if(err)return res.status(500).json({response:"server error"})
+                        else return res.status(200).json({response:"Success"})
 
-                else return res.status(201).json({response:"Success"})
+                    })
+                }
             })
-        }            
+        }
     })
 })
 
