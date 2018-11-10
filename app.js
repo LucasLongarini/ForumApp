@@ -10,9 +10,9 @@ const postRoutes = require('./api/routes/posts')
 const commentRoutes = require('./api/routes/comments')
 const userRoutes = require('./api/routes/users')
 
-//localhost:3000
-app.listen(3000, ()=>{
-    console.log("Server Listening on port 3000")
+const PORT = process.env.PORT || 3000
+app.listen(PORT, ()=>{
+    console.log("Server Listening on :"+ PORT)
 })
 
 app.get('/', (req, res)=>{
