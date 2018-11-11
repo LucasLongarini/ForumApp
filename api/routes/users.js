@@ -41,7 +41,7 @@ router.post('/register', (req, res)=>{
                         const token = jwt.sign({
                             id: result.insertId,
                             email: email
-                        },process.env.JWT_SECRET)
+                        },"test")
                         res.status(201).json({response: "successful",
                                               token: token,
                                               user_id: result.insertId})
@@ -77,7 +77,7 @@ router.post('/login', (req, res)=>{
                         const token = jwt.sign({
                             id: result[0].user_id,
                             email: result[0].email
-                        },process.env.JWT_SECRET)
+                        },"test")
                         res.status(200).json({response: "successful",
                                               token: token,
                                               user_id: result[0].user_id})
